@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PDF Dark Mode</title>
+<title>Liseuse — lecteur PDF sombre</title>
 <style>
   :root{
     --bg:#141216;
@@ -28,22 +28,23 @@
 
   /* ---------- Barre supérieure ---------- */
   header{
-    display:flex;align-items:center;gap:14px;flex-wrap:wrap;
-    padding:10px 16px;
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    padding:8px 14px;
     background:var(--panel);
     border-bottom:1px solid var(--border);
     z-index:10;
   }
   .wordmark{
     font-weight:700;letter-spacing:.04em;font-size:15px;
-    color:var(--text);white-space:nowrap;
+    white-space:nowrap;
   }
   .wordmark::before{
     content:"";display:inline-block;width:9px;height:9px;border-radius:50%;
-    background:var(--accent);margin-right:8px;vertical-align:baseline;
+    background:var(--accent);margin-right:8px;
   }
   .group{display:flex;align-items:center;gap:6px}
   .sep{width:1px;height:22px;background:var(--border)}
+  .spacer{flex:1}
 
   button{
     background:var(--panel-2);color:var(--text);
@@ -58,21 +59,21 @@
   button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
   button:disabled{opacity:.4;cursor:default}
 
-  .pageinfo{color:var(--muted);min-width:86px;text-align:center;font-variant-numeric:tabular-nums}
-  #zoomLevel{color:var(--muted);min-width:52px;text-align:center;font-variant-numeric:tabular-nums}
+  .pageinfo{color:var(--muted);min-width:80px;text-align:center;font-variant-numeric:tabular-nums}
+  #zoomLevel{color:var(--muted);min-width:50px;text-align:center;font-variant-numeric:tabular-nums}
 
-  /* ---------- Le variateur (signature) ---------- */
+  /* ---------- Variateur ---------- */
   .dimmer{
     display:flex;align-items:center;gap:10px;
     background:var(--panel-2);border:1px solid var(--border);
-    border-radius:999px;padding:5px 14px 5px 10px;
+    border-radius:999px;padding:4px 12px 4px 8px;
   }
   .dimmer .modes{display:flex;gap:4px}
-  .dimmer .modes button{border-radius:999px;padding:4px 11px;font-size:13px}
+  .dimmer .modes button{border-radius:999px;padding:3px 10px;font-size:13px}
   .dimmer label{color:var(--muted);font-size:12px;white-space:nowrap}
   input[type="range"]{
     -webkit-appearance:none;appearance:none;
-    width:110px;height:4px;border-radius:2px;
+    width:100px;height:4px;border-radius:2px;
     background:linear-gradient(to right,#3a3440,#6d6675);
     cursor:pointer;
   }
@@ -86,12 +87,42 @@
     background:var(--accent);border:2px solid #f0e9ee;
   }
 
-  /* ---------- Zone de lecture ---------- */
-  #viewer{
-    flex:1;overflow:auto;
-    scroll-behavior:auto;
-    padding:24px 0 60px;
+  /* ---------- Onglets ---------- */
+  #tabbar{
+    display:flex;align-items:flex-end;gap:4px;
+    padding:6px 10px 0;
+    background:var(--bg);
+    border-bottom:1px solid var(--border);
+    overflow-x:auto;scrollbar-width:thin;
   }
+  #tabbar:empty{display:none}
+  .tab{
+    display:flex;align-items:center;gap:8px;
+    max-width:230px;
+    padding:7px 10px 7px 14px;
+    background:var(--panel);
+    border:1px solid var(--border);border-bottom:none;
+    border-radius:10px 10px 0 0;
+    cursor:pointer;user-select:none;
+    color:var(--muted);
+    white-space:nowrap;
+  }
+  .tab.active{background:var(--panel-2);color:var(--text);border-color:#3a3440}
+  .tab .tname{overflow:hidden;text-overflow:ellipsis}
+  .tab .tname input{
+    background:var(--bg);color:var(--text);border:1px solid var(--accent);
+    border-radius:6px;padding:2px 6px;font:inherit;width:150px;
+  }
+  .tab .close{
+    border:none;background:none;padding:0 4px;border-radius:6px;
+    color:var(--muted);font-size:15px;line-height:1;
+  }
+  .tab .close:hover{color:#fff;background:var(--accent)}
+
+  /* ---------- Zone de lecture ---------- */
+  #viewer{flex:1;overflow:auto;padding:24px 0 60px}
+  .doc{display:none}
+  .doc.active{display:block}
   .page-wrap{
     margin:0 auto 18px;
     position:relative;
@@ -100,7 +131,6 @@
   }
   .page-wrap canvas{display:block;width:100%;height:100%}
 
-  /* Filtres appliqués aux canvas selon le mode */
   #viewer[data-mode="sombre"] canvas{
     filter:invert(0.93) hue-rotate(180deg) brightness(var(--lum)) contrast(0.96);
   }
@@ -111,7 +141,34 @@
     filter:brightness(var(--lum));
   }
 
-  /* ---------- Écran d'accueil ---------- */
+  /* Couche de surlignage */
+  .hl-layer{position:absolute;inset:0;z-index:1;pointer-events:none}
+  .hl{position:absolute;border-radius:2px;opacity:.38}
+  #viewer[data-mode="sombre"] .hl{mix-blend-mode:screen;opacity:.32}
+
+  /* Couche de texte (sélection) */
+  .textLayer{position:absolute;inset:0;overflow:hidden;line-height:1;z-index:2}
+  .textLayer span,.textLayer br{
+    color:transparent;position:absolute;white-space:pre;
+    cursor:text;transform-origin:0% 0%;
+  }
+  .textLayer ::selection{background:rgba(161,14,47,.5);color:transparent}
+
+  /* ---------- Barres flottantes ---------- */
+  .floatbar{
+    position:fixed;z-index:50;
+    display:flex;align-items:center;gap:8px;
+    background:var(--panel-2);border:1px solid #3a3440;
+    border-radius:999px;padding:6px 10px;
+    box-shadow:0 6px 22px rgba(0,0,0,.55);
+  }
+  .floatbar .dot{
+    width:22px;height:22px;border-radius:50%;
+    border:2px solid rgba(255,255,255,.25);padding:0;
+  }
+  .floatbar .dot:hover{border-color:#fff;background:inherit}
+
+  /* ---------- Accueil / modale / toast ---------- */
   #dropzone{
     flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
     gap:18px;text-align:center;padding:24px;
@@ -120,20 +177,43 @@
     width:120px;height:120px;border-radius:50%;
     background:radial-gradient(circle at 40% 35%, #3a1620, #141216 70%);
     border:1px solid var(--border);
-    display:flex;align-items:center;justify-content:center;
-    font-size:42px;
+    display:flex;align-items:center;justify-content:center;font-size:42px;
   }
   #dropzone h1{font-size:20px;font-weight:600}
-  #dropzone p{color:var(--muted);max-width:420px}
+  #dropzone p{color:var(--muted);max-width:440px}
   #dropzone.dragover .halo{border-color:var(--accent);box-shadow:0 0 0 6px rgba(161,14,47,.18)}
+
+  #modal{
+    position:fixed;inset:0;z-index:60;
+    background:rgba(10,8,12,.6);
+    display:flex;align-items:center;justify-content:center;
+  }
+  #modal .box{
+    background:var(--panel);border:1px solid var(--border);border-radius:14px;
+    padding:20px;min-width:320px;max-width:460px;
+  }
+  #modal h2{font-size:16px;margin-bottom:6px}
+  #modal .hint{color:var(--muted);font-size:13px;margin-bottom:12px}
+  #modal ul{list-style:none;margin-bottom:16px}
+  #modal li{display:flex;align-items:center;gap:10px;padding:6px 0}
+  #modal li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #modal .actions{display:flex;justify-content:flex-end;gap:8px}
+  #modal input[type="checkbox"]{accent-color:var(--accent);width:16px;height:16px}
+
+  #toast{
+    position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
+    background:var(--panel-2);border:1px solid #3a3440;color:var(--text);
+    padding:9px 18px;border-radius:999px;z-index:70;
+    box-shadow:0 6px 22px rgba(0,0,0,.55);
+  }
 
   #fileInput{display:none}
   .hidden{display:none !important}
 
-  @media (max-width:760px){
-    header{gap:8px;padding:8px 10px}
+  @media (max-width:860px){
+    header{gap:6px;padding:8px}
     .wordmark{display:none}
-    input[type="range"]{width:80px}
+    input[type="range"]{width:70px}
   }
   @media (prefers-reduced-motion: reduce){
     *{transition:none !important}
@@ -145,9 +225,7 @@
 <header>
   <span class="wordmark">Liseuse</span>
 
-  <div class="group">
-    <button id="openBtn" class="primary">Ouvrir un PDF</button>
-  </div>
+  <button id="openBtn" class="primary" title="Ouvrir (Ctrl+O)">Ouvrir</button>
 
   <div class="sep"></div>
 
@@ -177,48 +255,70 @@
     <label for="lum">Lumière</label>
     <input type="range" id="lum" min="55" max="100" value="85" aria-label="Intensité lumineuse">
   </div>
+
+  <div class="spacer"></div>
+
+  <div class="group">
+    <button id="saveBtn" title="Enregistrer avec les surlignages (Ctrl+S)">Enregistrer</button>
+    <button id="mergeBtn" title="Fusionner des onglets en un seul PDF">Fusionner</button>
+    <button id="printBtn" title="Imprimer (Ctrl+P)">Imprimer</button>
+  </div>
 </header>
+
+<div id="tabbar" role="tablist"></div>
 
 <div id="dropzone">
   <div class="halo">📄</div>
-  <h1>Dépose un PDF ici</h1>
-  <p>Ou clique sur « Ouvrir un PDF ». Tout se passe dans ton navigateur :
-     le fichier n'est envoyé nulle part. Mode sombre par défaut, luminosité réglable,
-     zoom sans perte de netteté.</p>
-  <button class="primary" id="openBtn2">Ouvrir un PDF</button>
+  <h1>Dépose un ou plusieurs PDF ici</h1>
+  <p>Tout se passe dans ton navigateur : rien n'est envoyé nulle part.
+     Sélectionne du texte pour le surligner, puis « Enregistrer » écrit les surlignages
+     comme de vraies annotations PDF, lisibles partout et modifiables ici.
+     Clic droit sur un surlignage pour le supprimer, double-clic sur un onglet pour le renommer.</p>
+  <button class="primary" id="openBtn2">Ouvrir des PDF</button>
 </div>
 
 <div id="viewer" class="hidden" data-mode="sombre" tabindex="0"></div>
 
-<input type="file" id="fileInput" accept="application/pdf">
+<div id="hlBar" class="floatbar hidden" role="toolbar" aria-label="Surligner"></div>
+<div id="delBar" class="floatbar hidden"><button id="delHl">Supprimer le surlignage</button></div>
+
+<input type="file" id="fileInput" accept="application/pdf" multiple>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
 const viewer   = document.getElementById("viewer");
 const dropzone = document.getElementById("dropzone");
+const tabbar   = document.getElementById("tabbar");
 const fileInput= document.getElementById("fileInput");
 const pageNumEl= document.getElementById("pageNum");
 const pageCountEl = document.getElementById("pageCount");
 const zoomLevelEl = document.getElementById("zoomLevel");
 const lumSlider = document.getElementById("lum");
+const hlBar = document.getElementById("hlBar");
+const delBar = document.getElementById("delBar");
 
-let pdfDoc = null;
-let scale = 1;            // échelle CSS logique
-let baseWidth = 0;        // largeur d'une page à échelle 1
-let pages = [];           // {wrap, canvas, num, rendered, renderTask}
+const HL_COLORS = ["#ffd54a", "#7ed37e", "#6db3f2", "#f28bb1"];
+const HL_OPACITY = 0.4;
+const MAX_CANVAS_PX = 16_000_000; // garde-fou mémoire au zoom fort
+
+let tabs = [];
+let activeId = null;
 let observer = null;
 let zoomTimer = null;
+let pendingDelete = null;
+const uid = () => Math.random().toString(36).slice(2, 10);
+const active = () => tabs.find(t => t.id === activeId) || null;
 
-/* ---------- Préférences (sans erreur si stockage indisponible) ---------- */
+/* ---------- Préférences ---------- */
 const prefs = {
   get(k, d){ try { return localStorage.getItem("liseuse:"+k) ?? d; } catch { return d; } },
   set(k, v){ try { localStorage.setItem("liseuse:"+k, v); } catch {} }
 };
 
-/* ---------- Mode & luminosité ---------- */
 function setMode(mode){
   viewer.dataset.mode = mode;
   document.querySelectorAll(".dimmer .modes button").forEach(b =>
@@ -233,105 +333,245 @@ function setLum(v){
   prefs.set("lum", v);
 }
 lumSlider.addEventListener("input", () => setLum(lumSlider.value));
-
-/* Restauration des préférences */
 setMode(prefs.get("mode", "sombre"));
 lumSlider.value = prefs.get("lum", "85");
 setLum(lumSlider.value);
 
-/* ---------- Ouverture de fichier ---------- */
+function toast(msg, ms = 2200){
+  document.getElementById("toast")?.remove();
+  const t = document.createElement("div");
+  t.id = "toast"; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), ms);
+}
+
+/* ---------- Ouverture ---------- */
 document.getElementById("openBtn").addEventListener("click", () => fileInput.click());
 document.getElementById("openBtn2").addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", () => {
-  if (fileInput.files[0]) loadFile(fileInput.files[0]);
+fileInput.addEventListener("change", async () => {
+  for (const f of fileInput.files) await openFile(f);
+  fileInput.value = "";
 });
 
 ["dragover","dragenter"].forEach(ev =>
   document.body.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.add("dragover"); }));
 ["dragleave","drop"].forEach(ev =>
   document.body.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.remove("dragover"); }));
-document.body.addEventListener("drop", e => {
-  const f = e.dataTransfer.files[0];
-  if (f && f.type === "application/pdf") loadFile(f);
+document.body.addEventListener("drop", async e => {
+  for (const f of e.dataTransfer.files)
+    if (f.type === "application/pdf") await openFile(f);
 });
 
-async function loadFile(file){
-  const buf = await file.arrayBuffer();
-  if (pdfDoc) { pdfDoc.destroy(); }
-  pdfDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+async function openFile(file){
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  await openBytes(file.name.replace(/\.pdf$/i, ""), bytes);
+}
 
-  document.title = file.name.replace(/\.pdf$/i,"") + " — Liseuse";
-  pageCountEl.textContent = pdfDoc.numPages;
+async function openBytes(name, bytes){
+  let doc;
+  try {
+    // copie : pdf.js transfère le buffer à son worker, on garde l'original pour pdf-lib
+    doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+  } catch(e){
+    toast("Impossible d'ouvrir ce PDF (protégé ou corrompu)");
+    return;
+  }
+  const tab = {
+    id: uid(), name, bytes, doc,
+    container: null, pages: [], dims: [],
+    baseWidth: 0, scale: 1, scrollTop: 0,
+    highlights: [], currentPage: 1,
+  };
+  tabs.push(tab);
+  await buildTabPages(tab);
+  await importHighlights(tab);
+  renderTabbar();
+  activateTab(tab.id);
+}
+
+/* ---------- Onglets ---------- */
+function renderTabbar(){
+  tabbar.innerHTML = "";
+  for (const t of tabs){
+    const el = document.createElement("div");
+    el.className = "tab" + (t.id === activeId ? " active" : "");
+    el.setAttribute("role", "tab");
+    el.dataset.id = t.id;
+
+    const nm = document.createElement("span");
+    nm.className = "tname";
+    nm.textContent = t.name;
+    nm.title = t.name + " — double-clic pour renommer";
+    el.appendChild(nm);
+
+    const x = document.createElement("button");
+    x.className = "close"; x.textContent = "×";
+    x.title = "Fermer";
+    x.addEventListener("click", ev => { ev.stopPropagation(); closeTab(t.id); });
+    el.appendChild(x);
+
+    el.addEventListener("click", () => activateTab(t.id));
+    el.addEventListener("dblclick", () => renameTab(t, nm));
+    tabbar.appendChild(el);
+  }
+}
+
+function renameTab(tab, nameEl){
+  const input = document.createElement("input");
+  input.value = tab.name;
+  nameEl.textContent = "";
+  nameEl.appendChild(input);
+  input.focus(); input.select();
+  const done = ok => {
+    if (ok && input.value.trim()) tab.name = input.value.trim();
+    renderTabbar();
+    if (tab.id === activeId) document.title = tab.name + " — Liseuse";
+  };
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") done(true);
+    if (e.key === "Escape") done(false);
+    e.stopPropagation();
+  });
+  input.addEventListener("blur", () => done(true));
+}
+
+function activateTab(id){
+  const prev = active();
+  if (prev) prev.scrollTop = viewer.scrollTop;
+
+  activeId = id;
+  const tab = active();
+  if (!tab) return;
+
+  document.querySelectorAll(".doc").forEach(d => d.classList.remove("active"));
+  tab.container.classList.add("active");
   dropzone.classList.add("hidden");
   viewer.classList.remove("hidden");
 
-  await buildPages();
-  fitToWidth();
+  document.title = tab.name + " — Liseuse";
+  pageCountEl.textContent = tab.doc.numPages;
+  pageNumEl.textContent = tab.currentPage;
+  zoomLevelEl.textContent = Math.round(tab.scale / fitScale(tab) * 100) + " %";
+
+  attachObserver(tab);
+  viewer.scrollTop = tab.scrollTop;
+  renderTabbar();
   viewer.focus();
 }
 
-/* ---------- Construction des pages (rendu paresseux) ---------- */
-async function buildPages(){
-  viewer.innerHTML = "";
-  pages = [];
-  if (observer) observer.disconnect();
+function closeTab(id){
+  const i = tabs.findIndex(t => t.id === id);
+  if (i < 0) return;
+  const [tab] = tabs.splice(i, 1);
+  tab.container.remove();
+  tab.doc.destroy();
+  if (activeId === id){
+    activeId = null;
+    if (tabs.length) activateTab(tabs[Math.max(0, i-1)].id);
+    else {
+      viewer.classList.add("hidden");
+      dropzone.classList.remove("hidden");
+      document.title = "Liseuse — lecteur PDF sombre";
+      pageNumEl.textContent = pageCountEl.textContent = "–";
+      zoomLevelEl.textContent = "–";
+    }
+  }
+  renderTabbar();
+}
 
-  const first = await pdfDoc.getPage(1);
-  baseWidth = first.getViewport({ scale: 1 }).width;
+/* ---------- Construction des pages ---------- */
+async function buildTabPages(tab){
+  const container = document.createElement("div");
+  container.className = "doc";
+  viewer.appendChild(container);
+  tab.container = container;
 
-  for (let i = 1; i <= pdfDoc.numPages; i++){
+  for (let i = 1; i <= tab.doc.numPages; i++){
+    const page = await tab.doc.getPage(i);
+    const vp = page.getViewport({ scale: 1 });
+    tab.dims.push({ w: vp.width, h: vp.height });
+    if (i === 1) tab.baseWidth = vp.width;
+
     const wrap = document.createElement("div");
     wrap.className = "page-wrap";
     wrap.dataset.page = i;
+
     const canvas = document.createElement("canvas");
-    wrap.appendChild(canvas);
-    viewer.appendChild(wrap);
-    pages.push({ wrap, canvas, num: i, rendered: false, renderTask: null });
+    const hlLayer = document.createElement("div");
+    hlLayer.className = "hl-layer";
+    const textLayer = document.createElement("div");
+    textLayer.className = "textLayer";
+
+    wrap.append(canvas, hlLayer, textLayer);
+    container.appendChild(wrap);
+    tab.pages.push({ wrap, canvas, hlLayer, textLayer, num: i,
+                     rendered: false, rendering: false, task: null });
   }
+  tab.scale = fitScale(tab);
+  applyPageSizes(tab);
+}
 
-  // Dimensions provisoires (ratio exact calculé au rendu)
-  await sizePlaceholders();
+function applyPageSizes(tab){
+  tab.pages.forEach((p, i) => {
+    p.wrap.style.width  = Math.floor(tab.dims[i].w * tab.scale) + "px";
+    p.wrap.style.height = Math.floor(tab.dims[i].h * tab.scale) + "px";
+  });
+}
 
+function attachObserver(tab){
+  if (observer) observer.disconnect();
   observer = new IntersectionObserver(entries => {
     for (const e of entries){
-      const p = pages[Number(e.target.dataset.page) - 1];
+      const p = tab.pages[Number(e.target.dataset.page) - 1];
       if (e.isIntersecting){
-        renderPage(p);
-        if (e.intersectionRatio > 0.4) pageNumEl.textContent = p.num;
+        renderPage(tab, p);
+        if (e.intersectionRatio > 0.4){
+          tab.currentPage = p.num;
+          pageNumEl.textContent = p.num;
+        }
       }
     }
   }, { root: viewer, rootMargin: "600px 0px", threshold: [0, 0.4] });
-
-  pages.forEach(p => observer.observe(p.wrap));
+  tab.pages.forEach(p => observer.observe(p.wrap));
 }
 
-async function sizePlaceholders(){
-  for (const p of pages){
-    const page = await pdfDoc.getPage(p.num);
-    const vp = page.getViewport({ scale });
-    p.wrap.style.width  = vp.width + "px";
-    p.wrap.style.height = vp.height + "px";
-    p.vpRatio = vp.height / vp.width;
-  }
-}
-
-/* ---------- Rendu net : canvas à scale × devicePixelRatio ---------- */
-async function renderPage(p){
+/* ---------- Rendu net ---------- */
+async function renderPage(tab, p){
   if (p.rendered || p.rendering) return;
   p.rendering = true;
   try {
-    const page = await pdfDoc.getPage(p.num);
-    const dpr = window.devicePixelRatio || 1;
-    const vp = page.getViewport({ scale: scale * dpr });
+    const page = await tab.doc.getPage(p.num);
+    let dpr = window.devicePixelRatio || 1;
+    const d = tab.dims[p.num - 1];
+    // garde-fou : plafonner la surface du canvas
+    while (d.w * tab.scale * dpr * d.h * tab.scale * dpr > MAX_CANVAS_PX && dpr > 0.5) dpr *= 0.8;
 
+    const vp = page.getViewport({ scale: tab.scale * dpr });
     p.canvas.width  = Math.floor(vp.width);
     p.canvas.height = Math.floor(vp.height);
     p.wrap.style.width  = Math.floor(vp.width / dpr) + "px";
     p.wrap.style.height = Math.floor(vp.height / dpr) + "px";
 
     const ctx = p.canvas.getContext("2d");
-    p.renderTask = page.render({ canvasContext: ctx, viewport: vp });
-    await p.renderTask.promise;
+    p.task = page.render({
+      canvasContext: ctx, viewport: vp,
+      annotationMode: pdfjsLib.AnnotationMode ? pdfjsLib.AnnotationMode.DISABLE : 0
+    });
+    await p.task.promise;
+
+    // couche de texte pour la sélection
+    p.textLayer.innerHTML = "";
+    const cssVp = page.getViewport({ scale: tab.scale });
+    p.textLayer.style.setProperty("--scale-factor", tab.scale);
+    const textContent = await page.getTextContent();
+    await pdfjsLib.renderTextLayer({
+      textContentSource: textContent,
+      container: p.textLayer,
+      viewport: cssVp,
+      textDivs: []
+    }).promise;
+
+    renderHlLayer(tab, p.num);
     p.rendered = true;
   } catch(e){
     if (e?.name !== "RenderingCancelledException") console.error(e);
@@ -341,86 +581,424 @@ async function renderPage(p){
 }
 
 /* ---------- Zoom ---------- */
-function setScale(newScale, anchorRatio){
+function fitScale(tab){
+  const avail = viewer.clientWidth - 48;
+  return tab.baseWidth ? Math.max(0.2, avail / tab.baseWidth) : 1;
+}
+
+function setScale(newScale){
+  const tab = active();
+  if (!tab) return;
   newScale = Math.min(5, Math.max(0.3, newScale));
-  if (Math.abs(newScale - scale) < 0.001) return;
+  if (Math.abs(newScale - tab.scale) < 0.001) return;
 
-  // conserver la position de lecture
-  const ratio = anchorRatio ?? (viewer.scrollTop / Math.max(1, viewer.scrollHeight));
-  scale = newScale;
-  zoomLevelEl.textContent = Math.round(scale / fitScale() * 100) + " %";
+  const ratio = viewer.scrollTop / Math.max(1, viewer.scrollHeight);
+  tab.scale = newScale;
+  zoomLevelEl.textContent = Math.round(tab.scale / fitScale(tab) * 100) + " %";
 
-  // redimensionner immédiatement (le CSS étire l'ancien rendu, pas de saut)
-  pages.forEach(p => {
-    p.wrap.style.width = Math.floor(baseWidth * scale) + "px";
-    p.wrap.style.height = Math.floor(baseWidth * scale * (p.vpRatio || 1.414)) + "px";
+  tab.pages.forEach(p => {
     p.rendered = false;
-    if (p.renderTask) { try { p.renderTask.cancel(); } catch {} }
+    if (p.task){ try { p.task.cancel(); } catch {} }
   });
+  applyPageSizes(tab);
   viewer.scrollTop = ratio * viewer.scrollHeight;
 
-  // re-render net, léger debounce pour les zooms rapides
   clearTimeout(zoomTimer);
   zoomTimer = setTimeout(() => {
     const vTop = viewer.scrollTop, vBottom = vTop + viewer.clientHeight;
-    pages.forEach(p => {
+    tab.pages.forEach(p => {
       const top = p.wrap.offsetTop, bottom = top + p.wrap.offsetHeight;
-      if (bottom > vTop - 600 && top < vBottom + 600) renderPage(p);
+      if (bottom > vTop - 600 && top < vBottom + 600) renderPage(tab, p);
     });
   }, 120);
 }
 
-function fitScale(){
-  const avail = viewer.clientWidth - 48;
-  return baseWidth ? avail / baseWidth : 1;
-}
-function fitToWidth(){
-  scale = 0; // force le recalcul
-  setScale(fitScale(), viewer.scrollTop / Math.max(1, viewer.scrollHeight));
-}
+document.getElementById("zoomIn").addEventListener("click", () => { const t = active(); if (t) setScale(t.scale * 1.2); });
+document.getElementById("zoomOut").addEventListener("click", () => { const t = active(); if (t) setScale(t.scale / 1.2); });
+document.getElementById("fitWidth").addEventListener("click", () => { const t = active(); if (t) setScale(fitScale(t)); });
 
-document.getElementById("zoomIn").addEventListener("click", () => setScale(scale * 1.2));
-document.getElementById("zoomOut").addEventListener("click", () => setScale(scale / 1.2));
-document.getElementById("fitWidth").addEventListener("click", fitToWidth);
-
-/* Ctrl + molette = zoom */
 viewer.addEventListener("wheel", e => {
   if (!e.ctrlKey) return;
   e.preventDefault();
-  setScale(scale * (e.deltaY < 0 ? 1.1 : 1/1.1));
+  const t = active();
+  if (t) setScale(t.scale * (e.deltaY < 0 ? 1.1 : 1/1.1));
 }, { passive: false });
 
 /* ---------- Navigation ---------- */
 function goToPage(n){
-  n = Math.min(pdfDoc?.numPages || 1, Math.max(1, n));
-  const p = pages[n-1];
+  const tab = active();
+  if (!tab) return;
+  n = Math.min(tab.doc.numPages, Math.max(1, n));
+  const p = tab.pages[n - 1];
   if (p) viewer.scrollTo({ top: p.wrap.offsetTop - 24 });
 }
-document.getElementById("prevBtn").addEventListener("click", () =>
-  goToPage(Number(pageNumEl.textContent) - 1));
-document.getElementById("nextBtn").addEventListener("click", () =>
-  goToPage(Number(pageNumEl.textContent) + 1));
+document.getElementById("prevBtn").addEventListener("click", () => goToPage((active()?.currentPage || 1) - 1));
+document.getElementById("nextBtn").addEventListener("click", () => goToPage((active()?.currentPage || 1) + 1));
 
+/* ---------- Surlignage : sélection → couleur ---------- */
+document.addEventListener("mouseup", e => {
+  if (hlBar.contains(e.target) || delBar.contains(e.target)) return;
+  setTimeout(maybeShowHlBar, 10);
+});
+
+function maybeShowHlBar(){
+  const tab = active();
+  const sel = window.getSelection();
+  if (!tab || !sel || sel.isCollapsed || !sel.rangeCount ||
+      !tab.container.contains(sel.anchorNode)){
+    hlBar.classList.add("hidden");
+    return;
+  }
+  const rects = collectSelectionRects(tab);
+  if (!rects.length){ hlBar.classList.add("hidden"); return; }
+
+  hlBar.innerHTML = "";
+  for (const c of HL_COLORS){
+    const b = document.createElement("button");
+    b.className = "dot";
+    b.style.background = c;
+    b.title = "Surligner";
+    b.addEventListener("click", () => {
+      addHighlights(tab, rects, c);
+      sel.removeAllRanges();
+      hlBar.classList.add("hidden");
+    });
+    hlBar.appendChild(b);
+  }
+  const last = sel.getRangeAt(sel.rangeCount - 1).getBoundingClientRect();
+  hlBar.classList.remove("hidden");
+  const bw = hlBar.offsetWidth;
+  hlBar.style.left = Math.max(8, Math.min(window.innerWidth - bw - 8,
+                     last.left + last.width/2 - bw/2)) + "px";
+  hlBar.style.top  = Math.max(8, last.top - 46) + "px";
+}
+
+function collectSelectionRects(tab){
+  const sel = window.getSelection();
+  const out = [];
+  for (let r = 0; r < sel.rangeCount; r++){
+    for (const cr of sel.getRangeAt(r).getClientRects()){
+      if (cr.width < 2 || cr.height < 2) continue;
+      for (const p of tab.pages){
+        const b = p.wrap.getBoundingClientRect();
+        const cx = cr.left + cr.width/2, cy = cr.top + cr.height/2;
+        if (cx >= b.left && cx <= b.right && cy >= b.top && cy <= b.bottom){
+          out.push({ page: p.num,
+            x: (cr.left - b.left) / b.width,
+            y: (cr.top  - b.top ) / b.height,
+            w: cr.width  / b.width,
+            h: cr.height / b.height });
+          break;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function addHighlights(tab, rects, color){
+  const byPage = new Map();
+  for (const r of rects){
+    if (!byPage.has(r.page)) byPage.set(r.page, []);
+    byPage.get(r.page).push({ x: r.x, y: r.y, w: r.w, h: r.h });
+  }
+  for (const [page, rs] of byPage){
+    tab.highlights.push({ id: uid(), page, color, rects: rs });
+    renderHlLayer(tab, page);
+  }
+}
+
+function renderHlLayer(tab, pageNum){
+  const p = tab.pages[pageNum - 1];
+  p.hlLayer.innerHTML = "";
+  for (const h of tab.highlights){
+    if (h.page !== pageNum) continue;
+    for (const r of h.rects){
+      const d = document.createElement("div");
+      d.className = "hl";
+      d.dataset.hid = h.id;
+      d.style.cssText = `left:${r.x*100}%;top:${r.y*100}%;width:${r.w*100}%;height:${r.h*100}%;background:${h.color}`;
+    p.hlLayer.appendChild(d);
+    }
+  }
+}
+
+/* Clic droit sur un surlignage → supprimer */
+viewer.addEventListener("contextmenu", e => {
+  const tab = active();
+  if (!tab) return;
+  const wrap = e.target.closest(".page-wrap");
+  if (!wrap) return;
+  const b = wrap.getBoundingClientRect();
+  const nx = (e.clientX - b.left) / b.width;
+  const ny = (e.clientY - b.top) / b.height;
+  const pageNum = Number(wrap.dataset.page);
+  const hit = tab.highlights.find(h => h.page === pageNum &&
+    h.rects.some(r => nx >= r.x && nx <= r.x + r.w && ny >= r.y && ny <= r.y + r.h));
+  if (!hit) return;
+  e.preventDefault();
+  pendingDelete = { tab, id: hit.id, page: pageNum };
+  delBar.classList.remove("hidden");
+  delBar.style.left = Math.min(window.innerWidth - delBar.offsetWidth - 8, e.clientX) + "px";
+  delBar.style.top  = (e.clientY + 8) + "px";
+});
+
+document.getElementById("delHl").addEventListener("click", () => {
+  if (!pendingDelete) return;
+  const { tab, id, page } = pendingDelete;
+  tab.highlights = tab.highlights.filter(h => h.id !== id);
+  renderHlLayer(tab, page);
+  delBar.classList.add("hidden");
+  pendingDelete = null;
+});
+document.addEventListener("mousedown", e => {
+  if (!delBar.contains(e.target)) delBar.classList.add("hidden");
+});
+
+/* ---------- Import des surlignages existants (annotations Highlight) ---------- */
+function rgb255ToHex(c){
+  return "#" + [...c].map(n => Math.round(n).toString(16).padStart(2, "0")).join("");
+}
+function hexToRgb01(hex){
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
+}
+
+async function importHighlights(tab){
+  for (let i = 1; i <= tab.doc.numPages; i++){
+    const page = await tab.doc.getPage(i);
+    let annots;
+    try { annots = await page.getAnnotations(); } catch { continue; }
+    const vp = page.getViewport({ scale: 1 });
+    for (const a of annots){
+      if (a.subtype !== "Highlight" || !a.quadPoints || !a.quadPoints.length) continue;
+      const rects = [];
+      for (const quad of a.quadPoints){
+        const pts = quad.map(pt => vp.convertToViewportPoint(pt.x, pt.y));
+        const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+        const x = Math.min(...xs), y = Math.min(...ys);
+        rects.push({ x: x / vp.width, y: y / vp.height,
+                     w: (Math.max(...xs) - x) / vp.width,
+                     h: (Math.max(...ys) - y) / vp.height });
+      }
+      tab.highlights.push({
+        id: uid(), page: i,
+        color: a.color ? rgb255ToHex(a.color) : HL_COLORS[0],
+        rects
+      });
+    }
+  }
+}
+
+/* ---------- Écriture des surlignages en annotations PDF (pdf-lib) ---------- */
+async function buildAnnotatedBytes(tab){
+  const { PDFDocument, PDFName } = PDFLib;
+  const src = await PDFDocument.load(tab.bytes, { ignoreEncryption: true });
+  const ctx = src.context;
+  const pagesL = src.getPages();
+
+  for (let idx = 0; idx < pagesL.length; idx++){
+    const pg = pagesL[idx];
+
+    // retirer les anciennes annotations Highlight (notre modèle fait foi)
+    const kept = [];
+    const annots = pg.node.lookup(PDFName.of("Annots"));
+    if (annots && annots.size){
+      for (let i = 0; i < annots.size(); i++){
+        const ref = annots.get(i);
+        let sub = null;
+        try {
+          const a = ctx.lookup(ref);
+          sub = a?.get?.(PDFName.of("Subtype"))?.toString();
+        } catch {}
+        if (sub !== "/Highlight") kept.push(ref);
+      }
+    }
+
+    const hs = tab.highlights.filter(h => h.page === idx + 1);
+    const pw = pg.getWidth(), ph = pg.getHeight();
+
+    // les coordonnées du modèle sont normalisées dans le repère du viewport ;
+    // convertToPdfPoint gère la rotation éventuelle de la page
+    const pdfjsPage = await tab.doc.getPage(idx + 1);
+    const vp = pdfjsPage.getViewport({ scale: 1 });
+
+    for (const h of hs){
+      const quads = [], allX = [], allY = [], apRects = [];
+      for (const r of h.rects){
+        const corners = [
+          vp.convertToPdfPoint(r.x * vp.width,        r.y * vp.height),
+          vp.convertToPdfPoint((r.x + r.w) * vp.width, r.y * vp.height),
+          vp.convertToPdfPoint(r.x * vp.width,        (r.y + r.h) * vp.height),
+          vp.convertToPdfPoint((r.x + r.w) * vp.width, (r.y + r.h) * vp.height),
+        ];
+        const xs = corners.map(c => c[0]), ys = corners.map(c => c[1]);
+        const x1 = Math.min(...xs), x2 = Math.max(...xs);
+        const y1 = Math.min(...ys), y2 = Math.max(...ys);
+        // ordre QuadPoints : haut-gauche, haut-droit, bas-gauche, bas-droit
+        quads.push(x1, y2, x2, y2, x1, y1, x2, y1);
+        allX.push(x1, x2); allY.push(y1, y2);
+        apRects.push([x1, y1, x2 - x1, y2 - y1]);
+      }
+      const rect = [Math.min(...allX), Math.min(...allY), Math.max(...allX), Math.max(...allY)];
+      const col = hexToRgb01(h.color);
+
+      const annot = ctx.obj({
+        Type: "Annot", Subtype: "Highlight",
+        Rect: rect, QuadPoints: quads,
+        C: col, CA: HL_OPACITY, F: 4,
+      });
+
+      // apparence (AP) pour un rendu fiable dans tous les lecteurs
+      try {
+        let ops = `/GS0 gs ${col.map(n => n.toFixed(3)).join(" ")} rg\n`;
+        for (const [x, y, w, hh] of apRects)
+          ops += `${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${hh.toFixed(2)} re f\n`;
+        const stream = ctx.stream(ops, {
+          Type: "XObject", Subtype: "Form", FormType: 1, BBox: rect,
+          Resources: { ExtGState: { GS0: { Type: "ExtGState", CA: HL_OPACITY, ca: HL_OPACITY, BM: "Multiply" } } },
+        });
+        annot.set(PDFName.of("AP"), ctx.obj({ N: ctx.register(stream) }));
+      } catch {}
+
+      kept.push(ctx.register(annot));
+    }
+    pg.node.set(PDFName.of("Annots"), ctx.obj(kept));
+  }
+  return await src.save();
+}
+
+/* ---------- Enregistrer ---------- */
+async function saveTab(){
+  const tab = active();
+  if (!tab) return;
+  let bytes;
+  try { bytes = await buildAnnotatedBytes(tab); }
+  catch(e){ console.error(e); toast("Échec de l'enregistrement (PDF protégé ?)"); return; }
+
+  const name = tab.name.toLowerCase().endsWith(".pdf") ? tab.name : tab.name + ".pdf";
+
+  if (window.showSaveFilePicker){
+    try {
+      const handle = await showSaveFilePicker({
+        suggestedName: name,
+        types: [{ description: "PDF", accept: { "application/pdf": [".pdf"] } }],
+      });
+      const w = await handle.createWritable();
+      await w.write(bytes); await w.close();
+      toast("Enregistré : " + name);
+      return;
+    } catch(e){
+      if (e.name === "AbortError") return;
+      // sinon on retombe sur le téléchargement classique
+    }
+  }
+  const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  toast("Téléchargé : " + name);
+}
+document.getElementById("saveBtn").addEventListener("click", saveTab);
+
+/* ---------- Imprimer ---------- */
+async function printTab(){
+  const tab = active();
+  if (!tab) return;
+  toast("Préparation de l'impression…");
+  let bytes;
+  try { bytes = await buildAnnotatedBytes(tab); } catch { bytes = tab.bytes; }
+  const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+  document.getElementById("printFrame")?.remove();
+  const f = document.createElement("iframe");
+  f.id = "printFrame";
+  f.style.cssText = "position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0";
+  f.src = url;
+  f.onload = () => {
+    try { f.contentWindow.focus(); f.contentWindow.print(); }
+    catch { window.open(url, "_blank"); }
+  };
+  document.body.appendChild(f);
+}
+document.getElementById("printBtn").addEventListener("click", printTab);
+
+/* ---------- Fusionner ---------- */
+document.getElementById("mergeBtn").addEventListener("click", () => {
+  if (tabs.length < 2){ toast("Ouvre au moins deux PDF à fusionner"); return; }
+  const modal = document.createElement("div");
+  modal.id = "modal";
+  const items = tabs.map(t =>
+    `<li><input type="checkbox" checked data-id="${t.id}" id="mg-${t.id}">
+     <label for="mg-${t.id}"><span>${t.name}</span></label></li>`).join("");
+  modal.innerHTML = `
+    <div class="box" role="dialog" aria-label="Fusionner des PDF">
+      <h2>Fusionner des onglets</h2>
+      <p class="hint">Les documents cochés seront assemblés dans l'ordre des onglets,
+      surlignages inclus, dans un nouvel onglet.</p>
+      <ul>${items}</ul>
+      <div class="actions">
+        <button id="mgCancel">Annuler</button>
+        <button id="mgGo" class="primary">Fusionner</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
+  modal.querySelector("#mgCancel").addEventListener("click", () => modal.remove());
+  modal.querySelector("#mgGo").addEventListener("click", async () => {
+    const ids = [...modal.querySelectorAll("input:checked")].map(c => c.dataset.id);
+    modal.remove();
+    if (ids.length < 2){ toast("Coche au moins deux documents"); return; }
+    toast("Fusion en cours…");
+    try {
+      const merged = await PDFLib.PDFDocument.create();
+      for (const id of ids){
+        const t = tabs.find(x => x.id === id);
+        const bytes = await buildAnnotatedBytes(t);
+        const src = await PDFLib.PDFDocument.load(bytes);
+        const copied = await merged.copyPages(src, src.getPageIndices());
+        copied.forEach(p => merged.addPage(p));
+      }
+      const out = await merged.save();
+      await openBytes("fusion", new Uint8Array(out));
+      toast("Fusion terminée");
+    } catch(e){
+      console.error(e);
+      toast("Échec de la fusion");
+    }
+  });
+});
+
+/* ---------- Clavier ---------- */
 document.addEventListener("keydown", e => {
-  if (!pdfDoc || e.target.tagName === "INPUT") return;
+  if (e.target.tagName === "INPUT") return;
+  if (e.ctrlKey || e.metaKey){
+    const k = e.key.toLowerCase();
+    if (k === "s"){ e.preventDefault(); saveTab(); return; }
+    if (k === "p"){ e.preventDefault(); printTab(); return; }
+    if (k === "o"){ e.preventDefault(); fileInput.click(); return; }
+    return;
+  }
+  const tab = active();
+  if (!tab) return;
   switch (e.key){
-    case "+": case "=": setScale(scale * 1.2); break;
-    case "-": setScale(scale / 1.2); break;
-    case "0": fitToWidth(); break;
-    case "ArrowLeft": goToPage(Number(pageNumEl.textContent) - 1); break;
-    case "ArrowRight": goToPage(Number(pageNumEl.textContent) + 1); break;
+    case "+": case "=": setScale(tab.scale * 1.2); break;
+    case "-": setScale(tab.scale / 1.2); break;
+    case "0": setScale(fitScale(tab)); break;
+    case "ArrowLeft": goToPage(tab.currentPage - 1); break;
+    case "ArrowRight": goToPage(tab.currentPage + 1); break;
     case "d": setMode("sombre"); break;
     case "t": setMode("tamise"); break;
     case "o": setMode("original"); break;
   }
 });
 
-/* Recalcul si la fenêtre change (avec position conservée) */
+/* ---------- Redimensionnement ---------- */
 let resizeTimer;
 window.addEventListener("resize", () => {
-  if (!pdfDoc) return;
+  const tab = active();
+  if (!tab) return;
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(fitToWidth, 200);
+  resizeTimer = setTimeout(() => setScale(fitScale(tab)), 200);
 });
 </script>
 </body>
