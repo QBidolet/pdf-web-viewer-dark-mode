@@ -45,7 +45,6 @@
   }
   .group{display:flex;align-items:center;gap:6px}
   .sep{width:1px;height:22px;background:var(--border)}
-  <button id="fsBtn" title="Plein écran (f)">⛶</button>
   .spacer{flex:1}
 
   button{
@@ -120,6 +119,18 @@
     color:var(--muted);font-size:15px;line-height:1;
   }
   .tab .close:hover{color:#fff;background:var(--accent)}
+
+  /* ---------- Immersive fullscreen ---------- */
+  /* En plein écran, header + tabbar passent en overlay fixe, glissés hors
+     écran. Ils reviennent quand la souris touche le bord haut (classe
+     .reveal, gérée en JS). Overlay = pas de reflow des pages. */
+  body.fs #bars{
+    position:fixed;top:0;left:0;right:0;z-index:40;
+    transform:translateY(-100%);
+    transition:transform .18s ease;
+    box-shadow:0 4px 24px rgba(0,0,0,.5);
+  }
+  body.fs.reveal #bars{transform:translateY(0)}
 
   /* ---------- Reading area ---------- */
   #viewer{flex:1;overflow:auto;padding:24px 0 60px}
@@ -224,6 +235,8 @@
 </head>
 <body>
 
+<!-- header + tabbar regroupés pour glisser ensemble en plein écran -->
+<div id="bars">
 <header>
   <span class="wordmark">Dark PDF Viewer</span>
 
@@ -264,10 +277,12 @@
     <button id="saveBtn" title="Save with highlights (Ctrl+S)">Save</button>
     <button id="mergeBtn" title="Merge open tabs into one PDF">Merge</button>
     <button id="printBtn" title="Print (Ctrl+P)">Print</button>
+    <button id="fsBtn" title="Plein écran (f)" aria-pressed="false">⛶</button>
   </div>
 </header>
 
 <div id="tabbar" role="tablist"></div>
+</div>
 
 <div id="dropzone">
   <div class="halo">📄</div>
@@ -969,6 +984,54 @@ document.getElementById("mergeBtn").addEventListener("click", () => {
   });
 });
 
+/* ---------- Fullscreen ---------- */
+const fsBtn = document.getElementById("fsBtn");
+const bars  = document.getElementById("bars");
+
+function toggleFullscreen(){
+  if (document.fullscreenElement){
+    document.exitFullscreen();
+  } else {
+    document.documentElement.requestFullscreen().catch(() =>
+      toast("Plein écran refusé par le navigateur"));
+  }
+}
+fsBtn.addEventListener("click", toggleFullscreen);
+
+document.addEventListener("fullscreenchange", () => {
+  const fs = !!document.fullscreenElement;
+  document.body.classList.toggle("fs", fs);
+  document.body.classList.remove("reveal");
+  fsBtn.setAttribute("aria-pressed", String(fs));
+  fsBtn.title = fs ? "Quitter le plein écran (f)" : "Plein écran (f)";
+  // en fs, les barres deviennent fixed → le viewer récupère toute la
+  // hauteur/largeur ; on recadre les pages sur le nouveau viewport
+  const t = active();
+  if (t) setScale(fitScale(t));
+});
+
+// révéler les barres quand la souris touche le bord haut de l'écran
+let revealTimer;
+document.addEventListener("mousemove", e => {
+  if (!document.body.classList.contains("fs")) return;
+  if (e.clientY < 4){
+    clearTimeout(revealTimer);
+    document.body.classList.add("reveal");
+  } else if (document.body.classList.contains("reveal") &&
+             e.clientY > bars.offsetHeight + 60){
+    clearTimeout(revealTimer);
+    revealTimer = setTimeout(() =>
+      document.body.classList.remove("reveal"), 400);
+  }
+});
+// garder les barres visibles tant qu'un de leurs contrôles a le focus
+bars.addEventListener("focusin", () => {
+  if (document.body.classList.contains("fs")){
+    clearTimeout(revealTimer);
+    document.body.classList.add("reveal");
+  }
+});
+
 /* ---------- Keyboard ---------- */
 document.addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT") return;
@@ -1001,25 +1064,6 @@ window.addEventListener("resize", () => {
   if (!tab) return;
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => setScale(fitScale(tab)), 200);
-});
-
-/* ---------- Fullscreen ---------- */
-const fsBtn = document.getElementById("fsBtn");
-function toggleFullscreen(){
-  if (document.fullscreenElement){
-    document.exitFullscreen();
-  } else {
-    document.documentElement.requestFullscreen().catch(() =>
-      toast("Plein écran refusé par le navigateur"));
-  }
-}
-fsBtn.addEventListener("click", toggleFullscreen);
-document.addEventListener("fullscreenchange", () => {
-  fsBtn.setAttribute("aria-pressed", String(!!document.fullscreenElement));
-  fsBtn.title = document.fullscreenElement ? "Quitter le plein écran (f)" : "Plein écran (f)";
-  // le viewport change → recadrer si on était en fit-width
-  const t = active();
-  if (t) setScale(fitScale(t));
 });
 </script>
 </body>
